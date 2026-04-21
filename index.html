@@ -212,7 +212,7 @@
       border-radius: 12px;
       min-width: 200px;
       overflow: hidden;
-      z-index: 999999999;
+      z-index: 99999;
     }
     .dropdown.open { display: block; }
 
@@ -656,6 +656,8 @@
     .game-card .info .title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
     .game-card .info .desc  { font-size: 12px; color: var(--text3); line-height: 1.5; }
     /* MUSIC PLAYER */
+    .msg-sender { font-size: 11px; color: var(--text3); margin-bottom: 2px; }
+
     .music-preset {
       display: flex;
       align-items: center;
@@ -732,7 +734,13 @@
         <div class="chat-sidebar">
           <div class="chat-sidebar-header">Messages</div>
           <div class="chat-user-list" id="chat-user-list">
-            <!-- populated from users.xml -->
+            <div class="chat-user-item" id="global-room-item" onclick="selectGlobalRoom()">
+              <div style="width:42px;height:42px;border-radius:50%;background:var(--bg3);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">🌐</div>
+              <div class="chat-user-info">
+                <div class="chat-user-name">Global</div>
+                <div class="chat-user-preview" id="global-preview">No messages yet</div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -741,36 +749,14 @@
 
           <div id="chat-convo" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
             <div class="chat-header" id="chat-header">
-              <img id="chat-header-pfp" src="" alt="" />
+              <div id="chat-header-icon" style="display:none;width:36px;height:36px;border-radius:50%;background:var(--bg3);border:2px solid var(--border);align-items:center;justify-content:center;font-size:18px;">🌐</div>
+              <img id="chat-header-pfp" src="" alt="" style="display:none;" />
               <span class="chat-header-name" id="chat-header-name"></span>
             </div>
-            <div class="chat-messages" id="chat-messages">
-              <!-- placeholder messages for styling -->
-              <div class="chat-msg">
-                <img id="chat-their-pfp" src="" alt="" />
-                <div>
-                  <div class="msg-time">12:01 PM</div>
-                  <div class="bubble">Hey! What's up?</div>
-                </div>
-              </div>
-              <div class="chat-msg me">
-                <img id="chat-my-pfp" src="" alt="" />
-                <div>
-                  <div class="msg-time">12:02 PM</div>
-                  <div class="bubble">Not much, just testing this chat!</div>
-                </div>
-              </div>
-              <div class="chat-msg">
-                <img id="chat-their-pfp2" src="" alt="" />
-                <div>
-                  <div class="msg-time">12:03 PM</div>
-                  <div class="bubble">Looks pretty clean ngl</div>
-                </div>
-              </div>
-            </div>
+            <div class="chat-messages" id="chat-messages"></div>
             <div class="chat-input-area">
-              <input class="chat-input" type="text" placeholder="Message..." />
-              <button class="chat-send-btn">
+              <input class="chat-input" id="chat-input" type="text" placeholder="Message..." />
+              <button class="chat-send-btn" id="chat-send-btn">
                 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path d="M2 21l21-9L2 3v7l15 2-15 2z"/>
                 </svg>
@@ -1167,7 +1153,7 @@
     })();
   </script>
 
-  <script>
+  <script type="module">
     // =====================
     // CONFIG — edit this
     // =====================
@@ -1196,6 +1182,8 @@
       if (match) match.classList.add('active');
       closeDropdown();
     }
+    window.switchPage = switchPage;
+    window.selectGlobalRoom = () => selectGlobalRoom();
 
     navTabs.forEach(tab => tab.addEventListener('click', () => switchPage(tab.dataset.page)));
 
@@ -1216,6 +1204,7 @@
       document.body.classList.toggle('light', el.checked);
       localStorage.setItem('theme', el.checked ? 'light' : 'dark');
     }
+    window.toggleTheme = toggleTheme;
 
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'light') {
@@ -1253,7 +1242,6 @@
       });
 
     // LOAD USER + CHAT SIDEBAR
-    let myPfp = '';
     fetch(ROOT_URL + 'users.xml')
       .then(r => r.text())
       .then(xml => {
@@ -1271,7 +1259,6 @@
         });
 
         if (!me) return;
-        myPfp = me.pfp;
 
         document.getElementById('nav-username').textContent  = me.username;
         document.getElementById('nav-pfp').src               = me.pfp;
@@ -1286,21 +1273,27 @@
         document.getElementById('acct-row-hash').textContent     = USER_HASH;
         document.getElementById('acct-row-url').textContent      = FULL_PATH;
 
-        // set my pfp on sent messages
-        document.getElementById('chat-my-pfp').src = me.pfp;
-
         // BUILD CHAT SIDEBAR — everyone except me
-        const list = document.getElementById('chat-user-list');
+        const list     = document.getElementById('chat-user-list');
+        const usersMap = {};
+        users.forEach(u => {
+          const hash     = u.querySelector('hash').textContent.trim();
+          const username = u.querySelector('username').textContent.trim();
+          const pfp      = ROOT_URL + u.querySelector('pfp').textContent.trim();
+          usersMap[hash] = { username, pfp };
+        });
+
         users.forEach(u => {
           const hash = u.querySelector('hash').textContent.trim();
           if (hash === USER_HASH) return;
 
-          const username = u.querySelector('username').textContent.trim();
-          const pfp      = ROOT_URL + u.querySelector('pfp').textContent.trim();
+          const username = usersMap[hash].username;
+          const pfp      = usersMap[hash].pfp;
 
           const item = document.createElement('div');
           item.className = 'chat-user-item';
           item.dataset.username = username;
+          item.dataset.hash     = hash;
           item.dataset.pfp      = pfp;
           item.innerHTML = `
             <img src="${pfp}" alt="${username}" />
@@ -1309,23 +1302,157 @@
               <div class="chat-user-preview">No messages yet</div>
             </div>
           `;
-          item.addEventListener('click', () => selectChatUser(item, username, pfp));
+          item.addEventListener('click', () => selectChatUser(item, username, pfp, hash));
           list.appendChild(item);
+        });
+
+        initChat(me.username, me.pfp, usersMap);
+      });
+
+    // ── FIREBASE CHAT ──
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getDatabase, ref, push, onValue, query, orderByChild, limitToLast, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDT_fgEabUkk6tSnfCvy6-4StSAYtfLA2Q",
+      authDomain: "key-chat-d5bf5.firebaseapp.com",
+      databaseURL: "https://key-chat-d5bf5-default-rtdb.firebaseio.com",
+      projectId: "key-chat-d5bf5",
+      storageBucket: "key-chat-d5bf5.firebasestorage.app",
+      messagingSenderId: "590376160246",
+      appId: "1:590376160246:web:0352222f96618037f3d5d7"
+    };
+
+    const fbApp = initializeApp(firebaseConfig);
+    const db    = getDatabase(fbApp);
+
+    let currentRoomId   = null;
+    let currentUnsub    = null;
+    let myUsername      = '';
+    let myPfp           = '';
+    let allUsers        = {};  // hash -> { username, pfp }
+
+    // called after users.xml loads
+    function initChat(meUsername, mePfp, usersMap) {
+      myUsername = meUsername;
+      myPfp      = mePfp;
+      allUsers   = usersMap;
+
+      // wire send button + enter key
+      const input   = document.getElementById('chat-input');
+      const sendBtn = document.getElementById('chat-send-btn');
+      sendBtn.addEventListener('click', sendMessage);
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') sendMessage(); });
+
+      // listen for global room preview
+      const globalQ = query(ref(db, 'rooms/global/messages'), orderByChild('ts'), limitToLast(1));
+      onValue(globalQ, snap => {
+        snap.forEach(c => {
+          document.getElementById('global-preview').textContent = c.val().text;
         });
       });
 
-    function selectChatUser(item, username, pfp) {
+      // listen for DM previews
+      Object.keys(usersMap).forEach(hash => {
+        if (hash === USER_HASH) return;
+        const roomId = dmRoomId(USER_HASH, hash);
+        const dmQ = query(ref(db, `rooms/${roomId}/messages`), orderByChild('ts'), limitToLast(1));
+        onValue(dmQ, snap => {
+          snap.forEach(c => {
+            const item = document.querySelector(`.chat-user-item[data-hash="${hash}"] .chat-user-preview`);
+            if (item) item.textContent = c.val().text;
+          });
+        });
+      });
+    }
+
+    function dmRoomId(a, b) {
+      return [a, b].sort().join('__');
+    }
+
+    function selectGlobalRoom() {
+      switchRoom('global', 'Global', null);
+      document.querySelectorAll('.chat-user-item').forEach(i => i.classList.remove('active'));
+      document.getElementById('global-room-item').classList.add('active');
+      // header
+      document.getElementById('chat-header-icon').style.display = 'flex';
+      document.getElementById('chat-header-pfp').style.display  = 'none';
+      document.getElementById('chat-header-name').textContent   = 'Global';
+    }
+
+    function selectChatUser(item, username, pfp, theirHash) {
       document.querySelectorAll('.chat-user-item').forEach(i => i.classList.remove('active'));
       item.classList.add('active');
-
-      document.getElementById('chat-empty').style.display   = 'none';
-      const convo = document.getElementById('chat-convo');
-      convo.style.display = 'flex';
-
-      document.getElementById('chat-header-pfp').src        = pfp;
+      // header
+      document.getElementById('chat-header-icon').style.display = 'none';
+      const pfpEl = document.getElementById('chat-header-pfp');
+      pfpEl.style.display = '';
+      pfpEl.src = pfp;
       document.getElementById('chat-header-name').textContent = username;
-      document.getElementById('chat-their-pfp').src         = pfp;
-      document.getElementById('chat-their-pfp2').src        = pfp;
+
+      switchRoom(dmRoomId(USER_HASH, theirHash), username, theirHash);
+    }
+
+    function switchRoom(roomId, name, theirHash) {
+      currentRoomId = roomId;
+
+      document.getElementById('chat-empty').style.display = 'none';
+      document.getElementById('chat-convo').style.display = 'flex';
+
+      // detach previous listener
+      if (currentUnsub) { currentUnsub(); currentUnsub = null; }
+
+      const msgContainer = document.getElementById('chat-messages');
+      msgContainer.innerHTML = '';
+
+      const now     = Date.now();
+      const dayAgo  = now - 24 * 60 * 60 * 1000;
+
+      const msgQ = query(ref(db, `rooms/${roomId}/messages`), orderByChild('ts'), limitToLast(100));
+      currentUnsub = onValue(msgQ, snap => {
+        msgContainer.innerHTML = '';
+        snap.forEach(child => {
+          const msg = child.val();
+          if (msg.ts < dayAgo) return; // skip old
+          appendMessage(msg, roomId);
+        });
+        msgContainer.scrollTop = msgContainer.scrollHeight;
+      });
+    }
+
+    function appendMessage(msg, roomId) {
+      const isMe     = msg.senderHash === USER_HASH;
+      const time     = new Date(msg.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const pfpSrc   = isMe ? myPfp : (allUsers[msg.senderHash]?.pfp || '');
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'chat-msg' + (isMe ? ' me' : '');
+      wrapper.innerHTML = `
+        <img src="${pfpSrc}" alt="" />
+        <div>
+          ${roomId === 'global' && !isMe ? `<div class="msg-sender">${msg.senderName}</div>` : ''}
+          <div class="msg-time">${time}</div>
+          <div class="bubble">${escapeHtml(msg.text)}</div>
+        </div>
+      `;
+      document.getElementById('chat-messages').appendChild(wrapper);
+    }
+
+    function sendMessage() {
+      const input = document.getElementById('chat-input');
+      const text  = input.value.trim();
+      if (!text || !currentRoomId) return;
+      input.value = '';
+      push(ref(db, `rooms/${currentRoomId}/messages`), {
+        text,
+        senderHash: USER_HASH,
+        senderName: myUsername,
+        ts: Date.now()
+      });
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     }
 
     function copyHash() {
@@ -1335,6 +1462,7 @@
         setTimeout(() => btn.textContent = 'Copy', 2000);
       });
     }
+    window.copyHash = copyHash;
 
     function applyMusicPreset() {
       const selected = document.querySelector('input[name="music-preset"]:checked');
@@ -1343,6 +1471,7 @@
       window.location.href = window.location.origin + window.location.pathname + '#' + encodeURIComponent(FULL_PATH.replace('file://', ''));
       location.reload();
     }
+    window.applyMusicPreset = applyMusicPreset;
 
     // MUSIC — preset system
     const MUSIC_DEFAULT = './1.mp3';
