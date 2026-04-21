@@ -327,6 +327,7 @@
     /* CHAT MAIN */
     .chat-main {
       flex: 1;
+      min-height: 0;
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -364,6 +365,7 @@
 
     .chat-messages {
       flex: 1;
+      min-height: 0;
       overflow-y: auto;
       padding: 20px;
       display: flex;
@@ -747,7 +749,7 @@
         <div class="chat-main" id="chat-main">
           <div class="chat-empty" id="chat-empty">Select a conversation</div>
 
-          <div id="chat-convo" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
+          <div id="chat-convo" style="display:none;flex:1;min-height:0;flex-direction:column;overflow:hidden;">
             <div class="chat-header" id="chat-header">
               <div id="chat-header-icon" style="display:none;width:36px;height:36px;border-radius:50%;background:var(--bg3);border:2px solid var(--border);align-items:center;justify-content:center;font-size:18px;">🌐</div>
               <img id="chat-header-pfp" src="" alt="" style="display:none;" />
