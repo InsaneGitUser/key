@@ -834,6 +834,33 @@
         <!-- ADD MORE SETTINGS SECTIONS HERE -->
 
         <div class="settings-section">
+          <div class="settings-section-title">Notifications</div>
+          <div class="settings-row">
+            <div>
+              <div class="row-label">Message notifications</div>
+              <div class="row-sub">Show a notification when you receive a message</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="notif-toggle" onchange="toggleNotifications(this)" />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+          <div class="settings-row">
+            <div>
+              <div class="row-label">Silent mode</div>
+              <div class="row-sub">Receive notifications without sound</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="silent-toggle" onchange="toggleSilent(this)" />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+          <div class="settings-row" id="notif-status-row">
+            <div class="row-label" id="notif-status" style="color:var(--text3);font-size:13px;">Notifications not enabled</div>
+          </div>
+        </div>
+
+        <div class="settings-section">
           <div class="settings-section-title">Background Music</div>
           <div class="settings-row" style="flex-direction: column; align-items: flex-start; gap: 14px;">
             <div class="row-label">Select a track</div>
@@ -1315,7 +1342,28 @@
           list.appendChild(item);
         });
 
-        initChat(me.username, me.pfp, usersMap);
+        // background notification listeners for all rooms
+      const allRooms = ['global'];
+      Object.keys(usersMap).forEach(hash => {
+        if (hash !== USER_HASH) allRooms.push(dmRoomId(USER_HASH, hash));
+      });
+      allRooms.forEach(roomId => {
+        const bgQ = query(ref(db, `rooms/${roomId}/messages`), orderByChild('ts'), limitToLast(1));
+        let bgInit = true;
+        onValue(bgQ, snap => {
+          if (bgInit) { bgInit = false; return; }
+          if (roomId === currentRoomId) return; // already showing
+          snap.forEach(child => {
+            const msg = child.val();
+            if (msg.senderHash === USER_HASH) return;
+            const senderName = usersMap[msg.senderHash]?.username || msg.senderName || 'Someone';
+            const roomName   = roomId === 'global' ? 'Global' : senderName;
+            sendNotification(roomName, `${senderName}: ${msg.text}`);
+          });
+        });
+      });
+
+      initChat(me.username, me.pfp, usersMap);
       });
 
     // ── FIREBASE CHAT ──
@@ -1408,31 +1456,32 @@
       document.getElementById('chat-empty').style.display = 'none';
       document.getElementById('chat-convo').style.display = 'flex';
 
-      // detach previous listener
       if (currentUnsub) { currentUnsub(); currentUnsub = null; }
 
       const msgContainer = document.getElementById('chat-messages');
       msgContainer.innerHTML = '';
 
-      const now     = Date.now();
-      const dayAgo  = now - 24 * 60 * 60 * 1000;
+      const now    = Date.now();
+      const dayAgo = now - 24 * 60 * 60 * 1000;
+      let initialLoad = true;
 
       const msgQ = query(ref(db, `rooms/${roomId}/messages`), orderByChild('ts'), limitToLast(100));
       currentUnsub = onValue(msgQ, snap => {
         msgContainer.innerHTML = '';
         snap.forEach(child => {
           const msg = child.val();
-          if (msg.ts < dayAgo) return; // skip old
-          appendMessage(msg, roomId);
+          if (msg.ts < dayAgo) return;
+          appendMessage(msg, roomId, initialLoad);
         });
+        initialLoad = false;
         msgContainer.scrollTop = msgContainer.scrollHeight;
       });
     }
 
-    function appendMessage(msg, roomId) {
-      const isMe     = msg.senderHash === USER_HASH;
-      const time     = new Date(msg.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const pfpSrc   = isMe ? myPfp : (allUsers[msg.senderHash]?.pfp || '');
+    function appendMessage(msg, roomId, suppressNotif = false) {
+      const isMe   = msg.senderHash === USER_HASH;
+      const time   = new Date(msg.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const pfpSrc = isMe ? myPfp : (allUsers[msg.senderHash]?.pfp || '');
 
       const wrapper = document.createElement('div');
       wrapper.className = 'chat-msg' + (isMe ? ' me' : '');
@@ -1445,6 +1494,12 @@
         </div>
       `;
       document.getElementById('chat-messages').appendChild(wrapper);
+
+      if (!isMe && !suppressNotif) {
+        const senderName = allUsers[msg.senderHash]?.username || msg.senderName || 'Someone';
+        const roomName   = roomId === 'global' ? 'Global' : senderName;
+        sendNotification(roomName, `${senderName}: ${msg.text}`);
+      }
     }
 
     function sendMessage() {
@@ -1482,7 +1537,56 @@
     }
     window.applyMusicPreset = applyMusicPreset;
 
-    // MUSIC — preset system
+    // NOTIFICATIONS
+    function updateNotifStatus() {
+      const status = document.getElementById('notif-status');
+      if (!status) return;
+      if (Notification.permission === 'granted') {
+        status.textContent = 'Notifications enabled';
+        status.style.color = '#4caf50';
+      } else if (Notification.permission === 'denied') {
+        status.textContent = 'Notifications blocked — allow them in browser settings';
+        status.style.color = '#f44336';
+      } else {
+        status.textContent = 'Notifications not enabled';
+        status.style.color = 'var(--text3)';
+      }
+    }
+
+    function toggleNotifications(el) {
+      if (el.checked) {
+        Notification.requestPermission().then(perm => {
+          if (perm !== 'granted') el.checked = false;
+          localStorage.setItem('notifications', el.checked ? '1' : '0');
+          updateNotifStatus();
+        });
+      } else {
+        localStorage.setItem('notifications', '0');
+        updateNotifStatus();
+      }
+    }
+    window.toggleNotifications = toggleNotifications;
+
+    function toggleSilent(el) {
+      localStorage.setItem('silentMode', el.checked ? '1' : '0');
+    }
+    window.toggleSilent = toggleSilent;
+
+    function sendNotification(title, body) {
+      if (Notification.permission !== 'granted') return;
+      if (localStorage.getItem('notifications') !== '1') return;
+      if (document.visibilityState === 'visible') return; // don't notify if tab is focused
+      const silent = localStorage.getItem('silentMode') === '1';
+      new Notification(title, { body, icon: './favicon.png', silent });
+    }
+
+    // restore saved notification settings
+    const savedNotif = localStorage.getItem('notifications') === '1' && Notification.permission === 'granted';
+    const notifToggle = document.getElementById('notif-toggle');
+    if (notifToggle) notifToggle.checked = savedNotif;
+    const silentToggle = document.getElementById('silent-toggle');
+    if (silentToggle) silentToggle.checked = localStorage.getItem('silentMode') === '1';
+    updateNotifStatus();
     const MUSIC_DEFAULT = './1.mp3';
 
     (function initMusic() {
