@@ -5,9 +5,4 @@
     <username>Jaxson</username>
     <pfp>pfps/jaxson.jpg</pfp>
   </user>
-  <user>
-    <hash>deadbeef1234</hash>
-    <username>Jordan</username>
-    <pfp>pfps/jordan.png</pfp>
-  </user>
 </users>
