@@ -1351,13 +1351,15 @@
         const bgQ = query(ref(db, `rooms/${roomId}/messages`), orderByChild('ts'), limitToLast(1));
         let bgInit = true;
         onValue(bgQ, snap => {
-          if (bgInit) { bgInit = false; return; }
-          if (roomId === currentRoomId) return; // already showing
+          if (bgInit) { bgInit = false; console.log('[notif] init skip for', roomId); return; }
+          console.log('[notif] new message in', roomId, 'currentRoom:', currentRoomId);
+          if (roomId === currentRoomId) return;
           snap.forEach(child => {
             const msg = child.val();
             if (msg.senderHash === USER_HASH) return;
             const senderName = usersMap[msg.senderHash]?.username || msg.senderName || 'Someone';
             const roomName   = roomId === 'global' ? 'Global' : senderName;
+            console.log('[notif] sending notification:', roomName, msg.text);
             sendNotification(roomName, `${senderName}: ${msg.text}`);
           });
         });
@@ -1387,7 +1389,8 @@
     let currentUnsub    = null;
     let myUsername      = '';
     let myPfp           = '';
-    let allUsers        = {};  // hash -> { username, pfp }
+    let allUsers        = {};
+    window._chat = { get currentRoomId() { return currentRoomId; } };  // hash -> { username, pfp }
 
     // called after users.xml loads
     function initChat(meUsername, mePfp, usersMap) {
@@ -1575,10 +1578,10 @@
     function sendNotification(title, body) {
       if (Notification.permission !== 'granted') return;
       if (localStorage.getItem('notifications') !== '1') return;
-      if (document.visibilityState === 'visible') return; // don't notify if tab is focused
       const silent = localStorage.getItem('silentMode') === '1';
       new Notification(title, { body, icon: './favicon.png', silent });
     }
+    window.sendNotification = sendNotification;
 
     // restore saved notification settings
     const savedNotif = localStorage.getItem('notifications') === '1' && Notification.permission === 'granted';
